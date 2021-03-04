@@ -2,8 +2,8 @@ module Refactoring
 
 menus
 
-  menu: "Refactoring"
+  menu: "Refactoring" (openeditor) (realtime)
   
-    action: "Rename" = rename-menu-action
-    
-    
+    action: "Rename" = rename-action-2
+    action: "Rename DEBUG" = rename-action-debug
+   

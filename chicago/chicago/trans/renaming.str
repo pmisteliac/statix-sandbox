@@ -1,0 +1,170 @@
+module renaming
+
+imports 
+	signatures/-
+	analysis
+	pp
+	libspoofax/stratego/debug
+	libspoofax/ui/dialogs
+	libspoofax/sdf/pp
+	
+	libspoofax/term/annotation
+  	libspoofax/term/origin
+  
+  	statix/runtime/-
+  	
+rules // menu action strategies    
+  rename-action:
+    (selected-term, _, ast, path, project-path) -> (path, result)
+    where
+		new-name := <read-new-name> path
+        ; {| ErrorMessage: renamed-ast := <rename(|selected-term, new-name, path) <+ show-errors; !ast> ast |}
+	    ; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
+	    
+rename-action-debug :
+    (selected-term, _, ast, path, project-path) -> (path, ast)
+    with
+    	analysis := <stx--get-ast-analysis> ast;
+    	<ppdebug(|"selected-term:")> selected-term;
+    	<ppdebug(|"ast:")> ast;
+    	<ppdebug(|"path:")> path; 
+    	<ppdebug(|"project-path:")> project-path;
+		asts := <get-project-constraint-analyses> analysis;
+		<ppdebug(|"asts: ")> asts
+	    
+	    
+    rename(|selected-term, new-name, path): ast -> renamed-ast
+    where
+    	analysis := <stx--get-ast-analysis> ast
+    	; resolution-relation :=  <calc-resolution-relation(|analysis)> ast
+    	; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
+	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
+		; renamed-ast := <rename-ast(|target-indices, new-name)> ast
+		; check-capture(|renamed-ast, resolution-relation, path)
+	    
+rules // Step 1: Calculate Resolution Relation
+
+  calc-resolution-relation(|analysis): ast -> user-defined-relation
+  where
+  	ref-dec-pairs  := <collect(get-dec-ref-pair(|analysis))> ast
+  	; decs-reflexive-pairs := <map(make-dec-reflexive-pair)> ref-dec-pairs
+  	; relation := <conc;make-set> (decs-reflexive-pairs, ref-dec-pairs)
+  	; user-defined-relation := <filter(is-not-built-in)> relation
+  	
+  get-dec-ref-pair(|analysis): ref -> (ref-index, dec-index)
+  where
+  	<is-string> ref
+  	; dec := <stx--get-ast-property(|analysis, Ref())> ref
+  	; ref-index@TermIndex(ref-path, _) := <stx--get-ast-index> ref
+  	; if index := <stx--get-ast-index> dec then
+  		dec-index := index
+  	  else
+  	    dec-index := TermIndex(ref-path,0)
+  	  end
+  	  
+  make-dec-reflexive-pair: (ref-index, dec-index) -> (dec-index, dec-index)  	  
+  	
+  is-not-built-in: (ref, dec@TermIndex(path, num-index)) -> <id>
+  where
+  	<not(eq)> (num-index, 0)
+  	    
+rules // Step 2: Find occurrence in selection
+	
+  find-occurrence(|ast, resolution-relation): selected-term -> occ
+  where
+    check-selection(|selected-term, ast)
+    ; occs := <get-all-occs> resolution-relation
+    ; occ := <add-error-on-fail(collect-one(get-occurrence(|occs))|"Renaming impossible", "The selected term cannot be renamed.")> selected-term
+    
+  	
+  get-all-occs: resolution-relation -> all-occs
+	where
+	decs := <map(get-dec)> resolution-relation
+    ; refs  := <map(get-ref)> resolution-relation
+    ; all-occs := <conc;nub> (decs, refs)
+    	
+  get-occurrence(|occs): term -> occurrence
+  where
+    if (<is-list> term) then
+      <map(get-occurrence(|occs))> term
+    else
+      <is-string> term
+      ; term-index := <stx--get-ast-index> term
+      ; occurrence := <fetch-elem(?term-index)> occs
+    end		
+    
+  get-dec: (ref, dec) -> dec
+  
+  get-ref: (ref, dec) -> ref 
+    
+
+rules //Step 3: Rename terms	 	
+
+  rename-ast(|target-indices, new-name): ast -> renamed-ast
+  where
+	renamed-ast := <bottomup(try(rename-term(|target-indices, new-name)))> ast
+
+  rename-term(|target-indices, new-name): term -> new-term
+	where
+		<is-string> term
+	 	; term-index := <stx--get-ast-index> term
+	    ; <elem> (term-index, target-indices)
+	    ; new-term := <stx--set-ast-index(|term-index)> new-name
+	  
+rules //Step 4: Checking for capture
+	 
+  check-capture(|renamed-ast, resolution-relation, path) =
+		(new-renamed-ast, new-analysis, _, _, _) := <stx-analyze-ast(pre-analyze, post-analyze|"static-semantics", "programOk")> (path, renamed-ast)
+		; <ppdebug(|"new-renamed-ast ")> new-renamed-ast
+		; old-resolution-relation := <qsort(dec-ref-pair-gt)> resolution-relation
+		; new-resolution-relation := <calc-resolution-relation(|new-analysis); qsort(dec-ref-pair-gt)> new-renamed-ast
+		; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
+		; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
+		; <add-error-on-fail(eq|"Capture detecte", "This renaming leads to name capture")> (old-resolution-relation, new-resolution-relation)
+															
+	dec-ref-pair-gt: ((ref-1, dec-1), (ref-2, dec-2)) -> <id>
+	where
+		<term-index-gt> (ref-1, ref-2)
+															
+	term-index-gt: (TermIndex(path-1, num-index-1), TermIndex(path-2, num-index-2)) -> <id>
+	where 
+		<gt> (num-index-1, num-index-2) 
+
+	stx-analyze-ast(pre, post|spec-name, init-constraint): (resource, ast) -> result
+    with 
+       spec  := <stx--language-spec-by-name> spec-name
+       ; level := <stx--log-level>
+       ; c-name := <stx--mk-qualified-name(|spec-name)> init-constraint
+    with
+      ast' := <pre;stx--index-ast(|resource)> ast
+      ; C := C(c-name, [<stx--explode> ast'], NoMessage())
+      ; Solution(_, a) := <stx--solve-constraint(|spec, level)> C
+      ; (error*, warning*, note*) := <stx--delays-as-errors;stx--extract-messages> a
+      ; ast'' := <post> ast'
+      ; result := (ast'', a, error*, warning*, note*)
+    
+rules // UI strategies
+	read-new-name: _ -> new-name
+	where 	
+   		new-name := <show-input-dialog(|"Rename", "")> "Enter a new name"
+   
+  check-selection(|selected-term, ast) =
+    <add-error-on-fail(not(eq)|"Invalid selection", "Please select a name")> (selected-term, ast)
+  	
+rules // error handling strategies 
+  add-error(|title, message) =
+    rules(
+      ErrorMessage :+ () -> (title, message)
+    )
+     
+  add-error-on-fail(s|title, message) =
+    s <+ add-error(|title, message); fail
+      
+  show-errors =    
+    [(title, message) | _] := <bagof-ErrorMessage> ()
+    ; <show-dialog(|title, "ERROR")> message      	
+						  
+rules // external rules
+	external calc-name-cluster(|)
+	
+    
