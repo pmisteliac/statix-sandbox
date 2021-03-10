@@ -37,7 +37,8 @@ rules
     !var[x, withType(T)] in s,
     resolveVar(s, x) == [(_, (_, _))] 
       | error $[Duplicate definition of variable [x]],
-    @x.type := T. 
+    @x.type := T,
+    @x.decl := x. 
     
   resolveVar(s, x) = ps :-  
     query var
