@@ -19,35 +19,65 @@ rules // menu action strategies
     where
 		new-name := <read-new-name> path
         ; {| ErrorMessage: renamed-ast := <rename(|selected-term, new-name, path) <+ show-errors; !ast> ast |}
-	    ; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
+        ; <ppdebug0> "rename"
+	    //; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
+	    ; result := <pp-chicago-string> renamed-ast
+	    ; <ppdebug1> "rename"
 	    
 rename-action-debug :
-    (selected-term, _, ast, path, project-path) -> (path, ast)
+    (selected-term, _, ast, path, project-path) -> (paths, results)
     with
     	analysis := <stx--get-ast-analysis> ast;
     	<ppdebug(|"selected-term:")> selected-term;
     	<ppdebug(|"ast:")> ast;
     	<ppdebug(|"path:")> path; 
     	<ppdebug(|"project-path:")> project-path;
-		asts := <get-project-constraint-analyses> analysis;
-		<ppdebug(|"asts: ")> asts
-	    
+		(paths, asts) := <get-analysed-asts>;
+		<ppdebug(|"asts: ")> asts;
+		<ppdebug(|"paths: ")> paths
+		; resolution-relation :=  <calc-resolution-relation-m> asts
+		; <ppdebug(|"resolution-relation: ")> resolution-relation
+		; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
+		; <ppdebug(|"selected-occ: ")> selected-occ
+		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
+		; <ppdebug(|"target-indices: ")> target-indices
+		; renamed-asts := <map(rename-ast(|target-indices, "foo"))> asts
+		; <ppdebug(|"renamed-asts: ")> renamed-asts
+		; results := <map(pp-chicago-string)> renamed-asts
+	
+	get-analysed-asts: _ -> (paths, asts)
+	where
+	  project-asts := <get-project-constraint-asts>
+	  ; (paths, asts) := <filter(is-not-dir-ast);unzip> project-asts	    
 	    
     rename(|selected-term, new-name, path): ast -> renamed-ast
     where
-    	analysis := <stx--get-ast-analysis> ast
-    	; resolution-relation :=  <calc-resolution-relation(|analysis)> ast
+    	resolution-relation :=  <calc-resolution-relation> ast
+    	; <ppdebug(|"resolution-relation:")> resolution-relation
     	; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
 	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
 		; renamed-ast := <rename-ast(|target-indices, new-name)> ast
-		; check-capture(|renamed-ast, resolution-relation, path)
+		//; check-capture(|renamed-ast, resolution-relation, path)
+		
+rules // Step 1M: Calculate Resolution Relation		
+
+  calc-resolution-relation-m: asts -> res-rels
+  where
+    res-rels := <mapconcat(calc-resolution-relation)> asts
+  	
+  is-not-dir-ast: (path, _) -> <id>
+  where
+  	<not(eq)> (path, ".")
+  	
+  get-ast: (path, ast) -> ast
 	    
 rules // Step 1: Calculate Resolution Relation
 
-  calc-resolution-relation(|analysis): ast -> user-defined-relation
+  calc-resolution-relation: ast -> user-defined-relation
   where
+  	analysis := <stx--get-ast-analysis> ast;
   	ref-dec-pairs  := <collect(get-dec-ref-pair(|analysis))> ast
-  	; decs-reflexive-pairs := <map(make-dec-reflexive-pair)> ref-dec-pairs
+  	; decs-reflexive-pairs := <collect(get-dec-reflexive-pair(|analysis))> ast
   	; relation := <conc;make-set> (decs-reflexive-pairs, ref-dec-pairs)
   	; user-defined-relation := <filter(is-not-built-in)> relation
   	
@@ -61,6 +91,12 @@ rules // Step 1: Calculate Resolution Relation
   	  else
   	    dec-index := TermIndex(ref-path,0)
   	  end
+  	  
+  get-dec-reflexive-pair(|analysis): t -> (dec-index, dec-index)
+  where
+  	<is-string> t
+  	; dec := <stx--get-ast-property(|analysis, Prop("decl"))> 
+  	; dec-index := <stx--get-ast-index> dec
   	  
   make-dec-reflexive-pair: (ref-index, dec-index) -> (dec-index, dec-index)  	  
   	
@@ -114,7 +150,7 @@ rules //Step 3: Rename terms
 rules //Step 4: Checking for capture
 	 
   check-capture(|renamed-ast, resolution-relation, path) =
-		(new-renamed-ast, new-analysis, _, _, _) := <stx-analyze-ast(pre-analyze, post-analyze|"static-semantics", "programOk")> (path, renamed-ast)
+		(new-renamed-ast, new-analysis, _, _, _) := <stx-analyze-ast(pre-analyze, post-analyze|"statics", "programOk")> (path, renamed-ast)
 		; <ppdebug(|"new-renamed-ast ")> new-renamed-ast
 		; old-resolution-relation := <qsort(dec-ref-pair-gt)> resolution-relation
 		; new-resolution-relation := <calc-resolution-relation(|new-analysis); qsort(dec-ref-pair-gt)> new-renamed-ast
