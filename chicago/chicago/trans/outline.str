@@ -9,6 +9,7 @@ imports
 
 rules
   
+  /*
   editor-outline:
     (_, _, ast, path, project-path) -> outline
     where
@@ -22,3 +23,4 @@ rules
 
   to-outline-label :
     Module(x, _) -> x
+    */
