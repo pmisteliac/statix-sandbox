@@ -41,13 +41,14 @@ rename-action-debug :
 		; <ppdebug(|"selected-occ: ")> selected-occ
 		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
 		; <ppdebug(|"target-indices: ")> target-indices
-		; renamed-asts := <map(rename-ast(|target-indices, "foo"))> asts
+		; new-name := <read-new-name> path
+		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
 		; <ppdebug(|"renamed-asts: ")> renamed-asts
 		; results := <map(pp-chicago-string)> renamed-asts
 	
 	get-analysed-asts: _ -> (paths, asts)
 	where
-	  project-asts := <get-project-constraint-asts>
+	  project-asts := <get-project-analyzed-asts>
 	  ; (paths, asts) := <filter(is-not-dir-ast);unzip> project-asts	    
 	    
     rename(|selected-term, new-name, path): ast -> renamed-ast
@@ -132,7 +133,7 @@ rules // Step 2: Find occurrence in selection
   get-dec: (ref, dec) -> dec
   
   get-ref: (ref, dec) -> ref 
-    
+
 
 rules //Step 3: Rename terms	 	
 
@@ -153,7 +154,7 @@ rules //Step 4: Checking for capture
 		(new-renamed-ast, new-analysis, _, _, _) := <stx-analyze-ast(pre-analyze, post-analyze|"statics", "programOk")> (path, renamed-ast)
 		; <ppdebug(|"new-renamed-ast ")> new-renamed-ast
 		; old-resolution-relation := <qsort(dec-ref-pair-gt)> resolution-relation
-		; new-resolution-relation := <calc-resolution-relation(|new-analysis); qsort(dec-ref-pair-gt)> new-renamed-ast
+		; new-resolution-relation := <calc-resolution-relation; qsort(dec-ref-pair-gt)> new-renamed-ast
 		; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
 		; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
 		; <add-error-on-fail(eq|"Capture detecte", "This renaming leads to name capture")> (old-resolution-relation, new-resolution-relation)
