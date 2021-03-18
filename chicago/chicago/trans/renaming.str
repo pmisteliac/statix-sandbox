@@ -10,8 +10,11 @@ imports
 	
 	libspoofax/term/annotation
   	libspoofax/term/origin
+  	libspoofax/analysis/constraint
   
   	statix/runtime/-
+  	statixruntime
+  	statix/api
   	
 rules // menu action strategies    
   rename-action:
@@ -23,11 +26,12 @@ rules // menu action strategies
 	    //; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
 	    ; result := <pp-chicago-string> renamed-ast
 	    ; <ppdebug1> "rename"
-	    
+
 rename-action-debug :
     (selected-term, _, ast, path, project-path) -> (paths, results)
     with
     	analysis := <stx--get-ast-analysis> ast;
+    	<ppdebug(|"stx-analysis:")> analysis;
     	<ppdebug(|"selected-term:")> selected-term;
     	<ppdebug(|"ast:")> ast;
     	<ppdebug(|"path:")> path; 
@@ -44,12 +48,19 @@ rename-action-debug :
 		; new-name := <read-new-name> path
 		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
 		; <ppdebug(|"renamed-asts: ")> renamed-asts
+		; multi :=  <multi-file> (paths, renamed-asts)
+		; <ppdebug(|"multi: ")> multi
+		; blub := <stx-editor-analyze(pre-analyze, post-analyze|"statics", "projectOk", "fileOk")> multi
+		; <ppdebug(|"blub: ")> blub
+		; blub2 := <stx--get-ast-analysis> blub
+		; <ppdebug(|"blub analysis: ")> blub2
 		; results := <map(pp-chicago-string)> renamed-asts
 	
 	get-analysed-asts: _ -> (paths, asts)
 	where
 	  project-asts := <get-project-analyzed-asts>
-	  ; (paths, asts) := <filter(is-not-dir-ast);unzip> project-asts	    
+	  ; <ppdebug(|"project-ast")> project-asts
+	  ; (paths, asts) := <filter(not(is-project-entry));unzip> project-asts	    
 	    
     rename(|selected-term, new-name, path): ast -> renamed-ast
     where
@@ -60,15 +71,35 @@ rename-action-debug :
 		; renamed-ast := <rename-ast(|target-indices, new-name)> ast
 		//; check-capture(|renamed-ast, resolution-relation, path)
 		
+rules // Multi-file analysis
+  multi-file: (paths, asts) -> AnalyzeMulti((".", Cached(analysis)), changes, (), ())
+    where
+      project-analyses := <get-project-constraint-analyses>
+      ; <ppdebug(|"project-asts:")> project-analyses
+      ; (_, analysis) := <fetch-elem(is-project-entry)> project-analyses
+      ; <ppdebug(|"analysis:")> analysis
+      ; files := <zip> (paths, asts)
+      ; <ppdebug(|"files")> files
+      ; changes := <map(make-changed(|project-analyses))> files
+      ; <ppdebug(|"changes")> changes
+      
+  make-changed(|project-analyses): (path, ast) -> (path, Changed(ast, analysis))
+    where
+      (_, analysis) := <fetch-elem(get-entry(|path))> project-analyses       
+		
 rules // Step 1M: Calculate Resolution Relation		
 
   calc-resolution-relation-m: asts -> res-rels
   where
     res-rels := <mapconcat(calc-resolution-relation)> asts
   	
-  is-not-dir-ast: (path, _) -> <id>
+  is-project-entry: (path, _) -> <id>
   where
-  	<not(eq)> (path, ".")
+  	<eq> (path, ".")
+  	
+  get-entry(|search-path): (path, _) -> <id>
+  where
+  	<eq> (path, search-path)  	
   	
   get-ast: (path, ast) -> ast
 	    
