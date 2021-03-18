@@ -1,4 +1,4 @@
 module bravo {
-  import foo;
+  import alpha;
   def b = a
 }
