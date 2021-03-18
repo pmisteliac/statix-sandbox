@@ -26,7 +26,10 @@ language:
     concurrent: false 
   stratego:
     format: jar
+<<<<<<< Upstream, based on b36ac3c0ce4392542d89f50e37103add208dc2b3
     #build: java
+=======
+>>>>>>> 93198c1 disable incremental compilation
     args:
     - -la
     - stratego-lib
