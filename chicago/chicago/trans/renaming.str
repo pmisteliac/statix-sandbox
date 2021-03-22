@@ -15,6 +15,7 @@ imports
   	statix/runtime/-
   	statixruntime
   	statix/api
+
   	
 rules // menu action strategies    
   rename-action:
@@ -33,7 +34,8 @@ rename-action-debug :
 		(paths, asts) := <get-analysed-asts>
 		//; <ppdebug(|"asts: ")> asts
 		//; <ppdebug(|"paths: ")> paths
-		; resolution-relation :=  <calc-resolution-relation-m> asts
+		; analysis := <get-project-analysis>
+		; resolution-relation :=  <calc-resolution-relation-m(|analysis)> asts
 		; <ppdebug(|"resolution-relation: ")> resolution-relation
 		; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
 		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
@@ -46,13 +48,12 @@ rename-action-debug :
 	get-analysed-asts: _ -> (paths, asts)
 	where
 	  project-asts := <get-project-analyzed-asts>
-	  // ; <ppdebug(|"project-ast")> project-asts
 	  ; (paths, asts) := <filter(not(is-project-entry));unzip> project-asts	    
 	    
     rename(|selected-term, new-name, path): ast -> renamed-ast
     where
          analysis := <stx--get-ast-analysis> ast
-    	; resolution-relation :=  <calc-resolution-relation-file> (analysis, ast)
+    	; resolution-relation :=  <calc-resolution-relation-file(|analysis)> ast
     	; <ppdebug(|"resolution-relation:")> resolution-relation
     	; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
 	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
@@ -61,11 +62,9 @@ rename-action-debug :
 		
 rules // Step 1M: Calculate Resolution Relation		
 
-  calc-resolution-relation-m: asts -> res-rels
+  calc-resolution-relation-m(|analysis): asts -> res-rels
   where
-    analyses := <map(stx--get-ast-analysis)> asts
-    ; analyzed-asts := <zip> (analyses, asts)
-    ; res-rels := <calc-resolution-relation-project> analyzed-asts
+    res-rels := <calc-resolution-relation-project(|analysis)> asts
   	
   is-project-entry: (path, _) -> <id>
   where
@@ -77,11 +76,11 @@ rules // Step 1M: Calculate Resolution Relation
 	    
 rules // Step 1: Calculate Resolution Relation
 
-  calc-resolution-relation-project: analyzed-asts -> res-rels
+  calc-resolution-relation-project(|analysis): asts -> res-rels
   where
-     res-rels := <mapconcat(calc-resolution-relation-file)> analyzed-asts
+     res-rels := <mapconcat(calc-resolution-relation-file(|analysis))> asts
 
-  calc-resolution-relation-file: (analysis,  ast) -> user-defined-relation
+  calc-resolution-relation-file(|analysis): ast -> user-defined-relation
   where
   	ref-dec-pairs  := <collect(get-dec-ref-pair(|analysis))> ast
   	; <ppdebug(|"ref-dec-pairs")> ref-dec-pairs
@@ -100,7 +99,7 @@ rules // Step 1: Calculate Resolution Relation
   	  else
   	    dec-index := TermIndex(ref-path,0)
   	  end
-  	  
+
   get-dec-reflexive-pair(|analysis): t -> (dec-index, dec-index)
   where
   	<is-string> t
@@ -162,20 +161,20 @@ rules //Step 4: Checking for capture
 		multi :=  < make-analyze-multi> (paths, asts)
 		; analysis-result := <stx-editor-analyze(pre-analyze, post-analyze|"statics", "projectOk", "fileOk")> multi
 		; <ppdebug(|"analysis-result: ")> analysis-result
-		; new-analysis :=  <get-new-analysis> analysis-result
 		; new-asts := <get-new-asts> analysis-result
-		; <ppdebug(|"new-asts: ")> new-asts
-		; new-resolution-relation := <calc-resolution-relation-project; qsort(dec-ref-pair-gt)> new-asts
+		; new-analysis := <get-new-analysis> analysis-result
+		; new-resolution-relation := <calc-resolution-relation-project(|new-analysis); qsort(dec-ref-pair-gt)> new-asts
 		; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
 		; old-resolution-relation := <qsort(dec-ref-pair-gt)> resolution-relation
 		; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
 		; <add-error-on-fail(eq|"Capture detecte", "This renaming leads to name capture")> (old-resolution-relation, new-resolution-relation) 
 		
-  make-analyze-multi: (paths, asts) ->  AnalyzeMulti((".", Cached(analysis)), changes, (), ())
+  make-analyze-multi: (paths, asts) ->  AnalyzeMulti((".", project), changes, (), ())
     where
       project-analyses := <get-project-constraint-analyses>
       // ; <ppdebug(|"project-asts:")> project-analyses
       ; (_, analysis) := <fetch-elem(is-project-entry)> project-analyses
+      ; project := Cached(analysis)
       ; files := <zip> (paths, asts)
       ; changes := <map(make-changed(|project-analyses))> files
      //  ; <ppdebug(|"changes: ")> changes*/
@@ -187,9 +186,9 @@ rules //Step 4: Checking for capture
       
   get-new-analysis:  AnalysisResult(analysis-list) -> analysis-object
     where
-		// <ppdebug(|"analysis-list: ")> analysis-list
-		(_, (Update(project-analysis, _, _, _))) := <fetch-elem(is-project-entry)> analysis-list
-		// ; <ppdebug(|"project-analysis: ")> project-analysis
+		 <ppdebug(|"analysis-list: ")> analysis-list
+		; (_, (Update(project-analysis, _, _, _))) := <fetch-elem(is-project-entry)> analysis-list
+		 ; <ppdebug(|"project-analysis: ")> project-analysis
 		; analysis-object := <get-analysis-object> project-analysis 
 		
   get-new-asts:  AnalysisResult(analysis-list) -> analyzed-asts
@@ -197,7 +196,7 @@ rules //Step 4: Checking for capture
 		analyses := <filter(not(is-project-entry))> analysis-list
 		; analyzed-asts := <map(get-analyzed-ast)> analyses
 		
-  get-analyzed-ast : (_, Full(ast, FileAnalysis(analysis, _), _, _,_)) -> (analysis, ast)		  		
+  get-analyzed-ast : (_, Full(ast, FileAnalysis(_, analysis), _, _,_)) -> (analysis, ast)		  		
 		
   get-project-analysis: _ -> analysis-object
     where 	
@@ -205,7 +204,7 @@ rules //Step 4: Checking for capture
       ; (_, analysis) := <fetch-elem(is-project-entry)> project-analyses
       ; analysis-object := <get-analysis-object> analysis 	
     
-  get-analysis-object: ProjectAnalysis(_,analysis-object, _, _) -> analysis-object
+  get-analysis-object: ProjectAnalysis(_, _, _, analysis-object) -> analysis-object
       
 	dec-ref-pair-gt: ((ref-1, dec-1), (ref-2, dec-2)) -> <id>
 	where
@@ -214,19 +213,6 @@ rules //Step 4: Checking for capture
 	term-index-gt: (TermIndex(path-1, num-index-1), TermIndex(path-2, num-index-2)) -> <id>
 	where 
 		<gt> (num-index-1, num-index-2) 
-
-	stx-analyze-ast(pre, post|spec-name, init-constraint): (resource, ast) -> result
-    with 
-       spec  := <stx--language-spec-by-name> spec-name
-       ; level := <stx--log-level>
-       ; c-name := <stx--mk-qualified-name(|spec-name)> init-constraint
-    with
-      ast' := <pre;stx--index-ast(|resource)> ast
-      ; C := C(c-name, [<stx--explode> ast'], NoMessage())
-      ; Solution(_, a) := <stx--solve-constraint(|spec, level)> C
-      ; (error*, warning*, note*) := <stx--delays-as-errors;stx--extract-messages> a
-      ; ast'' := <post> ast'
-      ; result := (ast'', a, error*, warning*, note*)
     
 rules // UI strategies
 	read-new-name: _ -> new-name
