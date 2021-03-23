@@ -19,15 +19,18 @@ imports
   	
 rules	    
   rename-action(construct-textual-change, analyze):
-    (selected-term, _, ast, _, _) -> (paths, results)
+    (selected-term, _, selected-ast, _, _) -> (paths, results)
     where
       {| ErrorMessage:
         new-name := <read-new-name>
-        ; renamed-ast := <rename(analyze|selected-term, new-name)> ast 
-        ; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
-        ; results := ""
-        ; paths := ""
-      <+ show-errors |}    
+        ; (paths, asts) := <get-analysed-asts> 
+        ; renamed-asts := <rename(analyze|selected-term, new-name, paths, asts)> selected-ast
+        ; ast-diffs := <zip> (asts, renamed-asts)
+        ; <ppdebug(|"ast-diffs:")> ast-diffs 
+        ; results := <map(construct-textual-change;get-source-code)> ast-diffs
+      <+ show-errors |} 
+      
+  get-source-code:(_, _, source-code) -> source-code
 
 rename-action-debug :
     (selected-term, _, ast, path, project-path) -> (paths, results)
@@ -43,16 +46,15 @@ rename-action-debug :
 		; check-capture(editor-analyze|paths, renamed-asts, resolution-relation)
 		; results := <map(pp-chicago-string)> renamed-asts
 	
-    rename(analyze|selected-term, new-name): ast -> renamed-asts
+  rename(analyze|selected-term, new-name, paths, asts): selected-ast -> renamed-asts
     where
-         analysis := <get-project-analysis>
-        ; (paths, asts) := <get-analysed-asts> 
-    	; resolution-relation :=  <calc-resolution-relation-project(|analysis)> ast
-    	; <ppdebug(|"resolution-relation:")> resolution-relation
-    	; selected-occ := <find-name-index(|ast, resolution-relation)> selected-term
-	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
-		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
-		; check-capture(analyze|paths, renamed-asts, resolution-relation)     
+      analysis := <get-project-analysis>
+      ; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
+      ; <ppdebug(|"resolution-relation:")> resolution-relation
+      ; selected-occ := <find-name-index(|selected-ast, resolution-relation)> selected-term
+      ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
+      ; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
+      ; check-capture(analyze|paths, renamed-asts, resolution-relation)     
 
 rules // Step 1: Calculate Resolution Relation
 
