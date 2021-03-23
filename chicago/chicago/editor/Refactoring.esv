@@ -4,6 +4,6 @@ menus
 
   menu: "Refactoring"
   
-    action: "Rename" = rename-action
+    action: "Rename" = rename-menu-action
     action: "Rename DEBUG" = rename-action-debug
    
