@@ -26,25 +26,8 @@ rules
         ; (paths, asts) := <get-analysed-asts> 
         ; renamed-asts := <rename(analyze|selected-term, new-name, paths, asts)> selected-ast
         ; ast-diffs := <zip> (asts, renamed-asts)
-        ; <ppdebug(|"ast-diffs:")> ast-diffs 
         ; results := <map(construct-textual-change;get-source-code)> ast-diffs
       <+ show-errors |} 
-      
-  get-source-code:(_, _, source-code) -> source-code
-
-rename-action-debug :
-    (selected-term, _, ast, path, project-path) -> (paths, results)
-    with
-		(paths, asts) := <get-analysed-asts>
-		; analysis := <get-project-analysis>
-		; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
-		; <ppdebug(|"resolution-relation: ")> resolution-relation
-		; selected-occ := <find-name-index(|ast, resolution-relation)> selected-term
-		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
-		; new-name := <read-new-name> path
-		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
-		; check-capture(editor-analyze|paths, renamed-asts, resolution-relation)
-		; results := <map(pp-chicago-string)> renamed-asts
 	
   rename(analyze|selected-term, new-name, paths, asts): selected-ast -> renamed-asts
     where
@@ -169,6 +152,8 @@ rules // Utility strategies
   read-new-name: _ -> new-name
     where 	
       new-name := <show-input-dialog(|"Rename", "")> "Enter a new name"
+      
+  get-source-code:(_, _, source-code) -> source-code
       
   get-project-analysis: _ -> analysis-object
     where 	
