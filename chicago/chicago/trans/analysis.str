@@ -5,6 +5,7 @@ imports
   statixruntime
   statix/api
   statix/runtime/renaming
+  libspoofax/term/origin
 
   pp
   injections/-
