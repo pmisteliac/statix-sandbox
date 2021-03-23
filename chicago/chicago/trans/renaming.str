@@ -23,25 +23,20 @@ rules // menu action strategies
     where
 		new-name := <read-new-name> path
         ; {| ErrorMessage: renamed-ast := <rename(|selected-term, new-name, path) <+ show-errors; !ast> ast |}
-        ; <ppdebug0> "rename"
 	    //; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
 	    ; result := <pp-chicago-string> renamed-ast
-	    ; <ppdebug1> "rename"
 
 rename-action-debug :
     (selected-term, _, ast, path, project-path) -> (paths, results)
     with
 		(paths, asts) := <get-analysed-asts>
-		//; <ppdebug(|"asts: ")> asts
-		//; <ppdebug(|"paths: ")> paths
 		; analysis := <get-project-analysis>
-		; resolution-relation :=  <calc-resolution-relation-m(|analysis)> asts
+		; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
 		; <ppdebug(|"resolution-relation: ")> resolution-relation
-		; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
+		; selected-occ := <find-name-index(|ast, resolution-relation)> selected-term
 		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
 		; new-name := <read-new-name> path
 		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
-		// ; <ppdebug(|"renamed-asts: ")> renamed-asts
 		; check-capture(|paths, renamed-asts, resolution-relation)
 		; results := <map(pp-chicago-string)> renamed-asts
 	
@@ -50,110 +45,76 @@ rename-action-debug :
 	  project-asts := <get-project-analyzed-asts>
 	  ; (paths, asts) := <filter(not(is-project-entry));unzip> project-asts	    
 	    
-    rename(|selected-term, new-name, path): ast -> renamed-ast
+    rename(|selected-term, new-name, path): ast -> renamed-asts
     where
-         analysis := <stx--get-ast-analysis> ast
-    	; resolution-relation :=  <calc-resolution-relation-file(|analysis)> ast
+         analysis := <get-project-analysis>
+        ; (paths, asts) := <get-analysed-asts> 
+    	; resolution-relation :=  <calc-resolution-relation-project(|analysis)> ast
     	; <ppdebug(|"resolution-relation:")> resolution-relation
-    	; selected-occ := <find-occurrence(|ast, resolution-relation)> selected-term
+    	; selected-occ := <find-name-index(|ast, resolution-relation)> selected-term
 	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
-		; renamed-ast := <rename-ast(|target-indices, new-name)> ast
-		; check-capture(|renamed-ast, resolution-relation, path)     
-		
-rules // Step 1M: Calculate Resolution Relation		
+		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
+		; check-capture(|paths, renamed-asts, resolution-relation)     
 
-  calc-resolution-relation-m(|analysis): asts -> res-rels
-  where
-    res-rels := <calc-resolution-relation-project(|analysis)> asts
-  	
-  is-project-entry: (path, _) -> <id>
-  where
-  	<eq> (path, ".")
-  	
-  get-entry(|search-path): (path, _) -> <id>
-  where
-  	<eq> (path, search-path)  	
-	    
 rules // Step 1: Calculate Resolution Relation
 
   calc-resolution-relation-project(|analysis): asts -> res-rels
-  where
-     res-rels := <mapconcat(calc-resolution-relation-file(|analysis))> asts
+    where
+      res-rels := <mapconcat(calc-resolution-relation-file(|analysis))> asts
 
-  calc-resolution-relation-file(|analysis): ast -> user-defined-relation
-  where
-  	ref-dec-pairs  := <collect(get-dec-ref-pair(|analysis))> ast
-  	; <ppdebug(|"ref-dec-pairs")> ref-dec-pairs
-  	; decs-reflexive-pairs := <collect(get-dec-reflexive-pair(|analysis))> ast
-  	; <ppdebug(|"dec-pairs")> decs-reflexive-pairs
-  	; relation := <conc;make-set> (decs-reflexive-pairs, ref-dec-pairs)
-  	; user-defined-relation := <filter(is-not-built-in)> relation
+  calc-resolution-relation-file(|analysis): ast -> relation
+    where
+  	  relation := <collect(get-dec-ref-pair(|analysis) <+ get-dec-reflexive-pair(|analysis))> ast
   	
-  get-dec-ref-pair(|analysis): ref -> (ref-index, dec-index)
-  where
-  	<is-string> ref
-  	; dec := <stx--get-ast-property(|analysis, Ref())> ref
-  	; ref-index@TermIndex(ref-path, _) := <stx--get-ast-index> ref
-  	; if index := <stx--get-ast-index> dec then
-  		dec-index := index
-  	  else
-  	    dec-index := TermIndex(ref-path,0)
-  	  end
+  get-dec-ref-pair(|analysis): t -> (ref-index, dec-index)
+    where
+  	  <is-string> t
+  	  ; dec := <stx--get-ast-property(|analysis, Ref())> t
+  	  ; ref-index := <stx--get-ast-index> t
+  	  ; dec-index := <stx--get-ast-index> dec
 
   get-dec-reflexive-pair(|analysis): t -> (dec-index, dec-index)
-  where
-  	<is-string> t
-  	; dec := <stx--get-ast-property(|analysis, Prop("decl"))> 
-  	; dec-index := <stx--get-ast-index> dec
-  	  
-  make-dec-reflexive-pair: (ref-index, dec-index) -> (dec-index, dec-index)  	  
-  	
-  is-not-built-in: (ref, dec@TermIndex(path, num-index)) -> <id>
-  where
-  	<not(eq)> (num-index, 0)
+    where
+  	  <is-string> t
+  	  ; dec := <stx--get-ast-property(|analysis, Prop("decl"))> 
+  	  ; dec-index := <stx--get-ast-index> dec
+
+  is-user-defined: (ref, dec@TermIndex(path, num-index)) -> <id>
+    where
+      <not(eq)> (num-index, 0)
   	    
-rules // Step 2: Find occurrence in selection
-	
-  find-occurrence(|ast, resolution-relation): selected-term -> occ
-  where
-    check-selection(|selected-term, ast)
-    ; occs := <get-all-occs> resolution-relation
-    ; occ := <add-error-on-fail(collect-one(get-occurrence(|occs))|"Renaming impossible", "The selected term cannot be renamed.")> selected-term
-    
-  	
-  get-all-occs: resolution-relation -> all-occs
-	where
-	decs := <map(get-dec)> resolution-relation
-    ; refs  := <map(get-ref)> resolution-relation
-    ; all-occs := <conc;nub> (decs, refs)
-    	
-  get-occurrence(|occs): term -> occurrence
-  where
-    if (<is-list> term) then
-      <map(get-occurrence(|occs))> term
-    else
+rules // Step 2: Find name index in selection
+  find-name-index(|ast, res-rel): term -> occ-index
+    where
+      <check-selection(|term, ast)> ast
+      ; occ-index := <collect-one(get-name-index(|res-rel))> term  
+        <+ add-error(|"Renaming impossible", "The selected term cannot be renamed.")
+
+  get-name-index(|res-rel): term -> occurrence
+    where
+      if (<is-list> term) then
+        <map(get-name-index(|res-rel))> term
+      else
+        <is-string> term
+        ; term-index := <stx--get-ast-index> term
+        ; occurrence := <fetch-elem(res-pair-contains(|term-index))> res-rel
+      end	
+			
+  res-pair-contains(|term-index): (ref-index, dec-index) -> term-index 
+    where
+      <eq> (term-index, ref-index) <+ <eq> (term-index, dec-index)   
+
+
+rules //Step 4: Rename terms	 	
+  rename-ast(|target-indices, new-name): ast -> renamed-ast
+    where
+      renamed-ast := <bottomup(try(rename-term(|target-indices, new-name)))> ast
+
+  rename-term(|target-indices, new-name): term -> new-name
+    where
       <is-string> term
       ; term-index := <stx--get-ast-index> term
-      ; occurrence := <fetch-elem(?term-index)> occs
-    end		
-    
-  get-dec: (ref, dec) -> dec
-  
-  get-ref: (ref, dec) -> ref 
-
-
-rules //Step 3: Rename terms	 	
-
-  rename-ast(|target-indices, new-name): ast -> renamed-ast
-  where
-	renamed-ast := <bottomup(try(rename-term(|target-indices, new-name)))> ast
-
-  rename-term(|target-indices, new-name): term -> new-term
-	where
-		<is-string> term
-	 	; term-index := <stx--get-ast-index> term
-	    ; <elem> (term-index, target-indices)
-	    ; new-term := <stx--set-ast-index(|term-index)> new-name
+      ; <elem> (term-index, target-indices)
 	  
 rules //Step 4: Checking for capture
 	 
@@ -214,26 +175,32 @@ rules //Step 4: Checking for capture
 	where 
 		<gt> (num-index-1, num-index-2) 
     
-rules // UI strategies
-	read-new-name: _ -> new-name
-	where 	
-   		new-name := <show-input-dialog(|"Rename", "")> "Enter a new name"
-   
+rules // Utility strategies
+  read-new-name: _ -> new-name
+    where 	
+      new-name := <show-input-dialog(|"Rename", "")> "Enter a new name"
+
   check-selection(|selected-term, ast) =
-    <add-error-on-fail(not(eq)|"Invalid selection", "Please select a name")> (selected-term, ast)
+    <not(eq)> (selected-term, ast)
+  	<+ add-error(|"Invalid selection", "Please select a name")
   	
-rules // error handling strategies 
+  is-project-entry = get-entry(|".")
+
+  get-entry(|search-path): (path, _) -> <id>
+    where
+      <eq> (path, search-path)    	
+  	
   add-error(|title, message) =
     rules(
       ErrorMessage :+ () -> (title, message)
-    )
-     
-  add-error-on-fail(s|title, message) =
-    s <+ add-error(|title, message); fail
+    ); fail
       
   show-errors =    
     [(title, message) | _] := <bagof-ErrorMessage> ()
-    ; <show-dialog(|title, "ERROR")> message      	
+    ; <show-dialog(|title, "ERROR")> message
+     
+  add-error-on-fail(s|title, message) =
+    s <+ add-error(|title, message); fail
 						  
 rules // external rules
 	external calc-name-cluster(|)
