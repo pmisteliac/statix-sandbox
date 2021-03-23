@@ -17,14 +17,17 @@ imports
   	statix/api
 
   	
-rules // menu action strategies    
-  rename-action:
-    (selected-term, _, ast, path, project-path) -> (path, result)
+rules	    
+  rename-action(construct-textual-change, analyze):
+    (selected-term, _, ast, _, _) -> (paths, results)
     where
-		new-name := <read-new-name> path
-        ; {| ErrorMessage: renamed-ast := <rename(|selected-term, new-name, path) <+ show-errors; !ast> ast |}
-	    //; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
-	    ; result := <pp-chicago-string> renamed-ast
+      {| ErrorMessage:
+        new-name := <read-new-name>
+        ; renamed-ast := <rename(analyze|selected-term, new-name)> ast 
+        ; (_, _, result) := <construct-textual-change> (ast, renamed-ast)
+        ; results := ""
+        ; paths := ""
+      <+ show-errors |}    
 
 rename-action-debug :
     (selected-term, _, ast, path, project-path) -> (paths, results)
@@ -37,15 +40,10 @@ rename-action-debug :
 		; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
 		; new-name := <read-new-name> path
 		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
-		; check-capture(|paths, renamed-asts, resolution-relation)
+		; check-capture(editor-analyze|paths, renamed-asts, resolution-relation)
 		; results := <map(pp-chicago-string)> renamed-asts
 	
-	get-analysed-asts: _ -> (paths, asts)
-	where
-	  project-asts := <get-project-analyzed-asts>
-	  ; (paths, asts) := <filter(not(is-project-entry));unzip> project-asts	    
-	    
-    rename(|selected-term, new-name, path): ast -> renamed-asts
+    rename(analyze|selected-term, new-name): ast -> renamed-asts
     where
          analysis := <get-project-analysis>
         ; (paths, asts) := <get-analysed-asts> 
@@ -54,7 +52,7 @@ rename-action-debug :
     	; selected-occ := <find-name-index(|ast, resolution-relation)> selected-term
 	    ; target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
 		; renamed-asts := <map(rename-ast(|target-indices, new-name))> asts
-		; check-capture(|paths, renamed-asts, resolution-relation)     
+		; check-capture(analyze|paths, renamed-asts, resolution-relation)     
 
 rules // Step 1: Calculate Resolution Relation
 
@@ -117,78 +115,85 @@ rules //Step 4: Rename terms
       ; <elem> (term-index, target-indices)
 	  
 rules //Step 4: Checking for capture
-	 
-  check-capture(|paths, asts, resolution-relation) =
-		multi :=  < make-analyze-multi> (paths, asts)
-		; analysis-result := <stx-editor-analyze(pre-analyze, post-analyze|"statics", "projectOk", "fileOk")> multi
-		; <ppdebug(|"analysis-result: ")> analysis-result
-		; new-asts := <get-new-asts> analysis-result
-		; new-analysis := <get-new-analysis> analysis-result
-		; new-resolution-relation := <calc-resolution-relation-project(|new-analysis); qsort(dec-ref-pair-gt)> new-asts
-		; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
-		; old-resolution-relation := <qsort(dec-ref-pair-gt)> resolution-relation
-		; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
-		; <add-error-on-fail(eq|"Capture detecte", "This renaming leads to name capture")> (old-resolution-relation, new-resolution-relation) 
-		
-  make-analyze-multi: (paths, asts) ->  AnalyzeMulti((".", project), changes, (), ())
+  check-capture(analyze|paths, asts, resolution-relation) =
+    (new-asts, new-analysis) := <rerun-analysis(analyze)> (paths, asts)
+    ; new-resolution-relation := <calc-resolution-relation-project(|new-analysis); qsort(res-pair-gt)> new-asts
+    ; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
+    ; old-resolution-relation := <qsort(res-pair-gt)> resolution-relation
+    ; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
+    ; <eq>(old-resolution-relation, new-resolution-relation) 
+      <+ add-error(|"Capture detected", "This renaming leads to name capture") 
+
+  rerun-analysis(analyze): (paths, asts) -> (new-asts, new-analysis)
+    where
+      input := <make-analysis-input> (paths, asts)
+      ; analysis-result := <analyze> input
+      ; new-asts := <get-new-asts> analysis-result
+      ; new-analysis := <get-new-analysis> analysis-result
+      
+  make-analysis-input: (paths, asts) ->  AnalyzeMulti(project-changes, file-changes, (), ())
     where
       project-analyses := <get-project-constraint-analyses>
-      // ; <ppdebug(|"project-asts:")> project-analyses
-      ; (_, analysis) := <fetch-elem(is-project-entry)> project-analyses
-      ; project := Cached(analysis)
+      ; analysis := <get-project-entry> project-analyses
+      ; project-changes := (".", Cached(analysis))
       ; files := <zip> (paths, asts)
-      ; changes := <map(make-changed(|project-analyses))> files
-     //  ; <ppdebug(|"changes: ")> changes*/
+      ; file-changes := <map(make-file-change(|project-analyses))> files
        
-  make-changed(|project-analyses): (path, ast) -> (path, Changed(ast, analysis))
+  make-file-change(|project-analyses): (path, ast) -> (path, Changed(ast, analysis))
     where
       (_, analysis) := <fetch-elem(get-entry(|path))> project-analyses            
       
-      
   get-new-analysis:  AnalysisResult(analysis-list) -> analysis-object
     where
-		 <ppdebug(|"analysis-list: ")> analysis-list
-		; (_, (Update(project-analysis, _, _, _))) := <fetch-elem(is-project-entry)> analysis-list
-		 ; <ppdebug(|"project-analysis: ")> project-analysis
-		; analysis-object := <get-analysis-object> project-analysis 
+      (Update(project-analysis, _, _, _)) := <get-project-entry> analysis-list
+      ; analysis-object := <get-analysis-object> project-analysis 
 		
   get-new-asts:  AnalysisResult(analysis-list) -> analyzed-asts
     where
 		analyses := <filter(not(is-project-entry))> analysis-list
 		; analyzed-asts := <map(get-analyzed-ast)> analyses
 		
-  get-analyzed-ast : (_, Full(ast, FileAnalysis(_, analysis), _, _,_)) -> (analysis, ast)		  		
-		
-  get-project-analysis: _ -> analysis-object
-    where 	
-      project-analyses := <get-project-constraint-analyses>
-      ; (_, analysis) := <fetch-elem(is-project-entry)> project-analyses
-      ; analysis-object := <get-analysis-object> analysis 	
-    
-  get-analysis-object: ProjectAnalysis(_, _, _, analysis-object) -> analysis-object
+  get-analyzed-ast : (_, Full(ast, _, _, _,_)) -> ast		  		
       
-	dec-ref-pair-gt: ((ref-1, dec-1), (ref-2, dec-2)) -> <id>
-	where
-		<term-index-gt> (ref-1, ref-2)
+  res-pair-gt: ((ref-1, dec-1), (ref-2, dec-2)) -> <id>
+    where
+      <term-index-gt> (ref-1, ref-2) 
 															
-	term-index-gt: (TermIndex(path-1, num-index-1), TermIndex(path-2, num-index-2)) -> <id>
-	where 
-		<gt> (num-index-1, num-index-2) 
+  term-index-gt: (TermIndex(path-1, num-index-1), TermIndex(path-2, num-index-2)) -> <id>
+    where 
+      <string-gt> (path-1, path-2) <+ <gt> (num-index-1, num-index-2)
     
 rules // Utility strategies
   read-new-name: _ -> new-name
     where 	
       new-name := <show-input-dialog(|"Rename", "")> "Enter a new name"
-
-  check-selection(|selected-term, ast) =
-    <not(eq)> (selected-term, ast)
-  	<+ add-error(|"Invalid selection", "Please select a name")
+      
+  get-project-analysis: _ -> analysis-object
+    where 	
+      project-analyses := <get-project-constraint-analyses>
+      ; analysis := <get-project-entry> project-analyses
+      ; analysis-object := <get-analysis-object> analysis 	
+      
+  get-project-entry: entries -> project-analysis
+    where
+      (_, project-analysis) := <fetch-elem(is-project-entry)> entries
   	
   is-project-entry = get-entry(|".")
 
   get-entry(|search-path): (path, _) -> <id>
     where
-      <eq> (path, search-path)    	
+      <eq> (path, search-path)    
+    
+  get-analysis-object: ProjectAnalysis(_, _, _, analysis-object) -> analysis-object
+      
+  get-analysed-asts: _ -> (paths, asts)
+    where
+      project-asts := <get-project-analyzed-asts>
+      ; (paths, asts) := <filter(not(is-project-entry));unzip> project-asts	       
+
+  check-selection(|selected-term, ast) =
+    <not(eq)> (selected-term, ast)
+  	<+ add-error(|"Invalid selection", "Please select a name")
   	
   add-error(|title, message) =
     rules(
