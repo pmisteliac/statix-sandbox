@@ -23,15 +23,13 @@ rules
     where
       {| ErrorMessage:
         new-name := <read-new-name>
-        ; asts := <get-analysed-asts> 
-        ; renamed-asts := <rename(analyze|selected-term, new-name, asts)> selected-ast
+        ; renamed-asts := <rename(analyze|selected-term, new-name)> selected-ast
         ; renamed-program := <construct-renamed-program(construct-textual-change)> renamed-asts
       <+ show-errors |}
       
   construct-renamed-program(construct-textual-change): asts -> renamed-program
     where
       changed-asts := <filter(has-changed)> asts
-      ; <ppdebug(|"changed-asts:")> changed-asts 
       ; renamed-program := <map(construct-renamed-file(construct-textual-change));unzip> changed-asts
       
   construct-renamed-file(construct-textual-change): (path, ast, renamed-ast) -> (path, text)
@@ -42,20 +40,18 @@ rules
     where
       <not(eq)> (renamed-ast, ())
 	
-  rename(analyze|selected-term, new-name, asts): selected-ast -> renamed-asts
+  rename(analyze|selected-term, new-name): selected-ast -> renamed-asts
     where
-      analysis := <get-project-analysis>
+      asts := <get-analysed-asts> 
+      ; analysis := <get-project-analysis>
       ; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
       ; <ppdebug(|"resolution-relation:")> resolution-relation
       ; selected-occ := <find-name-index(|selected-ast, resolution-relation)> selected-term
       ; (target-paths, target-indices) := <find-related-occs> (selected-occ, resolution-relation)
-      ; <ppdebug(|"target-indices:")> target-indices
       ; renamed-asts := <rename-asts(|target-indices, target-paths, new-name)> asts
-      ; <ppdebug(|"renamed-asts:")> renamed-asts
       ; check-capture(analyze|renamed-asts, resolution-relation)     
 
 rules // Step 1: Calculate Resolution Relation
-
   calc-resolution-relation-project(|analysis): asts -> res-rels
     where
       res-rels := <mapconcat(calc-resolution-relation-file(|analysis))> asts
@@ -70,7 +66,6 @@ rules // Step 1: Calculate Resolution Relation
   	  ; dec := <stx--get-ast-property(|analysis, Ref())> t
   	  ; ref-index := <stx--get-ast-index> t
   	  ; dec-index := <stx--get-ast-index> dec
-  	  
 
   get-dec-reflexive-pair(|analysis): t -> (dec-index, dec-index)
     where
@@ -135,7 +130,7 @@ rules //Step 4: Rename terms
       ; term-index := <stx--get-ast-index> term
       ; <elem> (term-index, target-indices)
 	  
-rules //Step 4: Checking for capture
+rules //Step 5: Checking for capture
   check-capture(analyze|renamed-asts, resolution-relation) =
     (new-asts, new-analysis) := <rerun-analysis(analyze)> renamed-asts
     ; new-resolution-relation := <calc-resolution-relation-project(|new-analysis); qsort(res-pair-gt)> new-asts
@@ -148,10 +143,8 @@ rules //Step 4: Checking for capture
   rerun-analysis(analyze): renamed-asts -> (new-asts, new-analysis)
     where
       input := <make-analysis-input> renamed-asts
-      ; <ppdebug(|"input")> input
       ; analysis-result := <analyze> input
-      ; <ppdebug(|"analysis-result")> analysis-result
-      ; new-asts := <get-new-asts> analysis-result
+      ; new-asts := <get-new-asts(|renamed-asts)> analysis-result
       ; new-analysis := <get-new-analysis> analysis-result
       
   make-analysis-input: renamed-asts ->  AnalyzeMulti(project-changes, file-changes, (), ())
@@ -164,7 +157,6 @@ rules //Step 4: Checking for capture
   make-file-change(|project-analyses): (path, ast, renamed-ast) -> (path, file-change)
     where
       (_, analysis) := <fetch-elem(get-entry(|path))> project-analyses;
-      <ppdebug(|"path")> path;
       if (<eq> (renamed-ast, ())) then
         file-change := Cached(analysis)
       else
@@ -176,20 +168,28 @@ rules //Step 4: Checking for capture
       (Update(project-analysis, _, _, _)) := <get-project-entry> analysis-list
       ; analysis-object := <get-analysis-object> project-analysis 
 		
-  get-new-asts:  AnalysisResult(analysis-list) -> analyzed-asts
+  get-new-asts(|renamed-asts):  AnalysisResult(analysis-list) -> analyzed-asts
     where
 		analyses := <filter(not(is-project-entry))> analysis-list
-		; analyzed-asts := <map(get-analyzed-ast)> analyses
+		; changed-asts := <map(get-analyzed-ast)> analyses
+		; unchanged-asts := <filter(not(has-changed)); map(get-old-ast)> renamed-asts
+		; analyzed-asts:= <conc> (changed-asts, unchanged-asts)
 		
-  get-analyzed-ast : (path, Full(ast, _, _, _,_)) -> (path, ast)		  		
+  get-analyzed-ast : (path, Full(ast, _, _, _,_)) -> (path, ast)
+  
+  get-old-ast : (path, ast, renamed-ast) -> (path, ast)		  		
       
   res-pair-gt: ((ref-1, dec-1), (ref-2, dec-2)) -> <id>
     where
       <term-index-gt> (ref-1, ref-2) 
 															
   term-index-gt: (TermIndex(path-1, num-index-1), TermIndex(path-2, num-index-2)) -> <id>
-    where 
-      <string-gt> (path-1, path-2) <+ <gt> (num-index-1, num-index-2)
+    where
+      if <eq> (path-1, path-2) then
+         <gt> (num-index-1, num-index-2)
+      else
+         <string-gt> (path-1, path-2)
+      end
     
 rules // Utility strategies
   read-new-name: _ -> new-name
