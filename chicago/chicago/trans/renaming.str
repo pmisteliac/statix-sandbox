@@ -32,7 +32,7 @@ rules
       asts := <get-analysed-asts> 
       ; analysis := <get-project-analysis>
       ; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
-      ; <ppdebug(|"resolution-relation:")> resolution-relation
+      //; <ppdebug(|"resolution-relation:")> resolution-relation
       ; selected-index := <find-name-index(|selected-ast, resolution-relation)> selected-term
       ; (target-paths, target-indices) := <find-rename-target> (selected-index, resolution-relation)
       ; renamed-asts := <rename-asts(|target-indices, target-paths, new-name)> asts
@@ -86,7 +86,7 @@ rules //Step 3: Find occurrences to rename
     where
       target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
       ; target-paths := <get-paths-to-rename> target-indices
-      ; <ppdebug(|"paths-to-rename: ")> target-paths 
+      //; <ppdebug(|"paths-to-rename: ")> target-paths 
       
   get-paths-to-rename: target-indices -> paths
     where
@@ -121,9 +121,9 @@ rules //Step 5: Checking for capture
   check-capture(analyze|renamed-asts, resolution-relation) =
     (new-asts, new-analysis) := <rerun-analysis(analyze)> renamed-asts
     ; new-resolution-relation := <calc-resolution-relation-project(|new-analysis); qsort(res-pair-gt)> new-asts
-    ; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
+    //; <ppdebug(|"new-resolution-relation: ")> new-resolution-relation
     ; old-resolution-relation := <qsort(res-pair-gt)> resolution-relation
-    ; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
+    //; <ppdebug(|"old-resolution-relation: ")> old-resolution-relation
     ; <eq>(old-resolution-relation, new-resolution-relation) 
       <+ add-error(|"Capture detected", "This renaming leads to name capture") 
 
@@ -201,7 +201,9 @@ rules // Utility strategies
     where 	
       project-analyses := <get-project-constraint-analyses>
       ; analysis := <get-project-entry> project-analyses
-      ; analysis-object := <get-analysis-object> analysis 	
+      ; analysis-object := <get-analysis-object> analysis
+      ; <not(stx-analysis-has-errors)> analysis-object
+        <+ add-error(|"Renaming impossible", "The program contains errors.") 	
       
   get-project-entry: entries -> project-analysis
     where
