@@ -1,3 +1,3 @@
-module alpha {
+module delta {
   def a = 1
 }

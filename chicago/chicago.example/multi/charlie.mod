@@ -1,5 +1,5 @@
 module charlie {
-  import alpha;
+  import delta;
   def foo = 10;
   def b = a
 }

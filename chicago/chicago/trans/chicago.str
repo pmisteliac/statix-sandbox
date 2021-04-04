@@ -21,3 +21,4 @@ rules // Debugging
   rename-test(|selected-term, new-name) = rename(editor-analyze, id|selected-term, new-name);get-ast  
 
   get-ast: [(_, _, ast) | _] -> ast
+ 

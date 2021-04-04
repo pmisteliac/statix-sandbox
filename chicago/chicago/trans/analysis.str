@@ -4,7 +4,6 @@ imports
 
   statixruntime
   statix/api
-  statix/runtime/renaming
   libspoofax/term/origin
 
   pp
@@ -102,13 +101,6 @@ rules // Debugging
 
 rules
 
-  rename-menu-action : 
-    menu-terms -> <rename-action(construct-textual-change, editor-analyze)> menu-terms  
-  
-  rename-test(|selected-term, new-name) = 
-    rename(editor-analyze|selected-term, new-name);get-ast  
-
-  get-ast: [(_, _, ast) | _] -> ast
    
   
     
