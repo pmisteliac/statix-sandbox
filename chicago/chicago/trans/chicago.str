@@ -7,6 +7,7 @@ imports
   outline
   analysis
   renaming
+  libspoofax/stratego/debug
 
 rules // Debugging
   
@@ -16,9 +17,14 @@ rules // Debugging
       filename := <guarantee-extension(|"aterm")> path
     ; result   := node
     
-  rename-menu-action : menu-terms -> <rename-action(construct-textual-change, editor-analyze, id)> menu-terms  
+  rename-menu-action : menu-terms -> result 
+    where
+        measure-time(
+         result := <rename-action-2(construct-textual-change, editor-analyze, id)> menu-terms
+         , ?total-time)
+        ; <cputime-to-seconds; ppdebug(|"total-time: ")> total-time 
   
-  rename-test(|selected-term, new-name) = rename(editor-analyze, id|selected-term, new-name);get-ast  
+  rename-test(|selected-term, new-name) = rename-2(editor-analyze, id|selected-term, new-name);get-ast  
 
   get-ast: [(_, _, ast) | _] -> ast
  

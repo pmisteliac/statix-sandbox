@@ -3,7 +3,7 @@ module Module03a {
   module ABC{ }
 }
 
-module Module03b {
+module Module03z {
   import Module03a
   import Module03a.ABC
 }

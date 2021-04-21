@@ -1,4 +1,4 @@
-module Module5 {
+module Module8 {
 
 module A{
   import B
@@ -14,6 +14,6 @@ module C {
   }
   def c = 6
 }
-def c = 5
+def o = 5
  
 }   

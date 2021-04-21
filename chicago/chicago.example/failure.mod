@@ -13,16 +13,16 @@ module failure {
     def a = 4 + a
     def e = a + 5;
     import D;
-    def d = a + b + c
+    def d = pop + b + c
   }
   
   module C {
     import B;
-    def e = a
+    def e = pop
   } 
   
   module D {
-    def a = 6  
+    def pop = 6  
   }  
 
 } 

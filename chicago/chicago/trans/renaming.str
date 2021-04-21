@@ -18,25 +18,49 @@ imports
 
   	
 rules	    
-  rename-action(construct-textual-change, analyze, multi):
+  rename-action-2(construct-textual-change, analyze, multi):
     (selected-term, _, selected-ast, _, _) -> renamed-program
     where
       {| ErrorMessage:
         new-name := <read-new-name>
-        ; renamed-asts := <rename(analyze, multi|selected-term, new-name)> selected-ast
+        ; renamed-asts := <rename-2(analyze, multi|selected-term, new-name)> selected-ast
         ; renamed-program := <construct-renamed-program(construct-textual-change)> renamed-asts
       <+ show-errors |}
       
-  rename(analyze, multi|selected-term, new-name): selected-ast -> renamed-asts
+  rename-2(analyze, multi|selected-term, new-name): selected-ast -> renamed-asts
     where
       asts := <get-analysed-asts> 
       ; analysis := <get-project-analysis>
-      ; resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
-      //; <ppdebug(|"resolution-relation:")> resolution-relation
-      ; selected-index := <find-name-index(|selected-ast, resolution-relation)> selected-term
-      ; (target-paths, target-indices) := <find-rename-target> (selected-index, resolution-relation)
-      ; renamed-asts := <rename-asts(|target-indices, target-paths, new-name)> asts
-      ; check-capture(analyze, multi|renamed-asts, resolution-relation)     
+      
+      ; measure-time(
+         resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
+         , ?res-rel-time)
+        ; <ppdebug(|"res-rel: ")> resolution-relation
+        ; <cputime-to-seconds; ppdebug(|"res-rel-time: ")> res-rel-time
+        
+        ; measure-time(
+         selected-index := <find-name-index(|selected-ast, resolution-relation)> selected-term
+         , ?selected-index-time)
+        //; <ppdebug(|"selected-index: ")> selected-index
+        ; <cputime-to-seconds;ppdebug(|"selected-index-time: ")> selected-index-time
+        
+        ; measure-time(
+          (target-paths, target-indices) := <find-rename-target> (selected-index, resolution-relation)
+         , ?find-target-time)
+        //; <ppdebug(|"target-indices: ")> target-indices
+        //; <ppdebug(|"target-paths: ")> target-paths
+        ; <cputime-to-seconds;ppdebug(|"find-target-time: ")> find-target-time
+        
+        ; measure-time(
+         renamed-asts := <rename-asts(|target-indices, target-paths, new-name)> asts
+         , ?rename-time)
+        ; <cputime-to-seconds;ppdebug(|"rename-time: ")> rename-time
+        
+        ; measure-time(
+          check-capture(analyze, multi|renamed-asts, resolution-relation)
+         , ?check-capture-time)
+        ; <cputime-to-seconds;ppdebug(|"check-capture-time: ")> check-capture-time   
+       
 
 rules // Step 1: Calculate Resolution Relation
   calc-resolution-relation-project(|analysis): asts -> res-rels
@@ -84,7 +108,7 @@ rules // Step 2: Find name index in selection
 rules //Step 3: Find occurrences to rename	 	
  find-rename-target: (selected-occ, resolution-relation) -> (target-paths, target-indices)
     where
-      target-indices := <calc-name-cluster> (selected-occ, resolution-relation)
+      target-indices := <find-all-related-occs> (selected-occ, resolution-relation)
       ; target-paths := <get-paths-to-rename> target-indices
       //; <ppdebug(|"paths-to-rename: ")> target-paths 
       
@@ -257,8 +281,5 @@ rules // Utility strategies
   show-errors =    
     [(title, message) | _] := <bagof-ErrorMessage> ()
     ; <show-dialog(|title, "ERROR")> message
-						  
-rules // external rules
-	external calc-name-cluster(|)
 	
     
