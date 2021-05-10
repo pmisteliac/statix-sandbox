@@ -1,7 +1,7 @@
 module chicago
 
 imports
-  
+
   completion/completion
   pp
   outline
@@ -10,21 +10,20 @@ imports
   libspoofax/stratego/debug
 
 rules // Debugging
-  
+
   debug-show-aterm:
     (node, _, _, path, project-path) -> (filename, result)
     with
       filename := <guarantee-extension(|"aterm")> path
     ; result   := node
-    
-  rename-menu-action : menu-terms -> result 
+
+  rename-menu-action : menu-terms -> result
     where
         measure-time(
          result := <rename-action-2(construct-textual-change, editor-analyze, id)> menu-terms
          , ?total-time)
-        ; <cputime-to-seconds; ppdebug(|"total-time: ")> total-time 
-  
-  rename-test(|selected-term, new-name) = rename-2(editor-analyze, id|selected-term, new-name);get-ast  
+        ; <cputime-to-seconds; ppdebug(|"renaimg total-time (s): ")> total-time
+
+  rename-test(|selected-term, new-name) = rename-2(editor-analyze, id|selected-term, new-name);get-ast
 
   get-ast: [(_, _, ast) | _] -> ast
- 
