@@ -35,6 +35,8 @@ rules
         resolution-relation :=  <calc-resolution-relation-project(|analysis)> asts
         , ?res-rel-time)
       ; <cputime-to-seconds; ppdebug(|"1. calculate resolution relation time (s): ")> res-rel-time
+      ; ref-count := <length> resolution-relation
+      ; <ppdebug(|"ref-count:")> ref-count
       ; measure-time(
         selected-index := <find-name-index(|selected-ast, resolution-relation)> selected-term
         , ?selected-index-time)
